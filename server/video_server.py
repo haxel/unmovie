@@ -351,7 +351,7 @@ def main():
     p1 = svr.createPerspective("video")
 
     i1 = auth.createIdentity("video")
-    i1.setPassword("hola")
+    i1.setPassword("****")
     i1.addKeyByString("video_server", "video")
     auth.addIdentity(i1)
 
@@ -360,7 +360,7 @@ def main():
     
     sf = ShellFactory()
     sf.username = 'axel'
-    sf.password = '8shi'
+    sf.password = '****'
     sf.namespace['server'] = svr
     sf.namespace['quit'] = video_server.quit
 
