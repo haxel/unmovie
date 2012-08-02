@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Part of UNMOVIE
 # Copyright (C) 2002 Axel Heide
 
@@ -598,7 +599,7 @@ class FlashService(service.Service):
         group = self.groupOfParticipant(part)
         if group:
             try:
-                self.addWords(string.split(words,":"),participant,group.name)
+                self.addWords(words,participant,group.name)
             except:
                 traceback.print_exc()
                 
@@ -707,7 +708,6 @@ def main():
         bot.service = svc
         bot.name = ident_name
         bot.setInitialValues(params)
-        bot.connect_megahal()
         return bot
  
     
@@ -739,17 +739,17 @@ def main():
     
     fls = FlashFactory(svc,"******","9998")
    
-    sf = ShellFactory()
-    sf.username = 'axel'
-    sf.password = '****'
-    sf.namespace['server'] = svc
-    sf.namespace['factory'] = fls
-     
-    appl.listenTCP(8780, sf)
-    adm = server.Site(flashweb.WordsGadget(svc))
+    # sf = ShellFactory()
+    # sf.username = 'axel'
+    # sf.password = '****'
+    # sf.namespace['server'] = svc
+    # sf.namespace['factory'] = fls
+    #  
+    # appl.listenTCP(8780, sf)
+    # adm = server.Site(flashweb.WordsGadget(svc))
     appl.listenTCP(9998,fls)
-    appl.listenTCP(9996,pb.BrokerFactory(pb.AuthRoot(auth)))
-    appl.listenTCP(9997,adm)
+    # appl.listenTCP(9996,pb.BrokerFactory(pb.AuthRoot(auth)))
+    # appl.listenTCP(9997,adm)
 
     
     appl.run()
