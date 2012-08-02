@@ -3,8 +3,46 @@
 
 import time,traceback,random
 from flash import *
-from twisted.internet import threads,reactor,protocol
-from twisted.spread import pb
+from twisted.internet import threads,reactor,protocol,defer
+
+import types
+import operator
+from cobe.brain import Brain
+
+
+def deferLater(delay, callable, *args, **kw):
+
+    d = defer.Deferred()
+    d.addCallback(lambda ignored: callable(*args, **kw))
+    delayedCall = reactor.callLater(delay, d.callback, None)
+    return d
+
+class KeywordBrain(Brain):
+        
+    def keywords(self, text):
+        """Reply to a string of text. If the input is not already
+        Unicode, it will be decoded as utf-8."""
+        if type(text) != types.UnicodeType:
+            # Assume that non-Unicode text is encoded as utf-8, which
+            # should be somewhat safe in the modern world.
+            text = text.decode("utf-8", "ignore")
+
+        tokens = self.tokenizer.split(text)
+        input_ids = map(self.graph.get_token_by_text, tokens)
+
+        # filter out unknown words and non-words from the potential pivots
+        pivot_set = self._filter_pivots(input_ids)
+        keywords = self.get_word_tokens(pivot_set)
+        logger_debug.writeLog("kewords: " + ":".join(keywords))
+        return keywords
+    
+    def get_word_tokens(self, token_ids):
+        q = "SELECT text FROM tokens WHERE id IN %s AND is_word = 1" % \
+                self.graph.get_seq_expr(token_ids)
+
+        rows = self.graph._conn.execute(q)
+        if rows:
+            return map(operator.itemgetter(0), rows)
 
 
 class FlashBotChatter(FlashChatter):
@@ -17,7 +55,7 @@ class FlashBotChatter(FlashChatter):
     """
     """ some constants on bots behaviour """
 
-    perspective = None
+    brain = None
     initialAvoidsLeft = random.randint(6,9)
     initialRepliesLeft = random.randint(3,6)
     #i'll count the down
@@ -26,7 +64,6 @@ class FlashBotChatter(FlashChatter):
     receiver = ""
     message = ""
     keywords = ""
-    connection = None
     
     """ some timeouts for bot actions """
     # if a bot is in a discussion and noone talks it will start after timeout secs
@@ -42,6 +79,7 @@ class FlashBotChatter(FlashChatter):
     callLaterReq = None
     callLaterMov = None
     callLaterSpeakTimeout = None
+            
     
     def setInitialValues(self,params):
         """ some timeouts for bot actions """
@@ -53,14 +91,11 @@ class FlashBotChatter(FlashChatter):
         self.timeoutBeforeLeavingDiscussion = params[3]
         # if a bot needs someone to talk to it searches in a loop this value is the timeout between attempts
         self.timeoutBeforeSearchingReceiver = params[4]
+    
         self.movementSpeed = params[5]
-        
-
-    def connect_megahal(self):
-        self.connection = pb.connect("localhost",8787,self.name, "****","megahalservice", None, 2)
-        self.connection.addCallback(self.loadBrain)
-        self.connection.addErrback(self.failure)
-        
+        self.brain = KeywordBrain(self.name)
+        self.loadBrain()
+                
     def receiveDirectMessage(self, sender, message, metadata = None):
         self.debug("message received! from: %s" % (sender))
         self.receiver = sender
@@ -72,6 +107,8 @@ class FlashBotChatter(FlashChatter):
             raise CommandNotFound
 
     def receiveDirectCommand(self, *args, **kw):
+        #print self.name,args[1]
+
         if not args: return
         if args[0] == "msg":
             try:
@@ -168,7 +205,8 @@ class FlashBotChatter(FlashChatter):
         
     def memberLeave(self):
         #self.participant.changeStatus(AVOID)
-        print self.participant.name
+        #print self.participant.name
+        pass
         
     def finishTalking(self):
         if self.repliesLeft: 
@@ -220,11 +258,10 @@ class FlashBotChatter(FlashChatter):
     def sendKeywords(self,keywords):
         self.keywords = keywords
         self.service.storeWords(self.participant.name,keywords)
-        self.service.sendParticipants(self.name,"botkeys",{"text":keywords,"sender":self.name})
+        #self.service.sendParticipants(self.name,"botkeys",{"text":keywords,"sender":self.name})
                
-    def failure(self,why=None):
-        self.debug("something wrong %s" % `why`)
-        self.connection = None
+    def failure(self,fail=None):
+        self.debug("something wrong %s" % fail.getErrorMessage())
         #print "couldn't connect to botserver"
 
     def reply(self,receiver="",message=""):
@@ -245,18 +282,17 @@ class FlashBotChatter(FlashChatter):
         self.receiver = receiver
         self.message = message
         self.participant.changeStatus(TALK)
-        if self.perspective:
-            self.perspective.callRemote('answer', self.message).addCallbacks(self.sendAnswer,self.failure)
-            self.perspective.callRemote('keywords', self.message).addCallbacks(self.sendKeywords,self.failure)
+        if self.brain:
+            d1 = deferLater(0,self.brain.reply,self.message)
+            d1.addCallbacks(self.sendAnswer,self.failure)
+            d2 = deferLater(0,self.brain.keywords,self.message)
+            d2.addCallbacks(self.sendKeywords,self.failure)
         #self.message = ""
         if self.repliesLeft: self.repliesLeft -= 1 
 
 
-    def loadBrain(self,megahal_perspective):
+    def loadBrain(self):
         self.participant.setLocation((random.randint(0,768),random.randint(0,576)))
         self.changeLocation()
         self.service.addParticipant(self.participant)
-
-        self.perspective = megahal_perspective
-        self.perspective.callRemote('load', self.name).addErrback(self.logout)
 

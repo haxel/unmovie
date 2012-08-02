@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Part of UNMOVIE
 # Copyright (C) 2002 Axel Heide
 
@@ -44,15 +45,16 @@ class VideoDatabase(adbapi.Augmentation):
         import string
         # Define the query 
         sql = []
-        if type(keylist) == list:
+        if type(keylist) == list and len(keylist):
             #args = string.join(map(lambda x:" "+x,keylist)," ")
             for key in keylist:
+               key = key.replace('"', '\\"').replace("'", "\\'")
                sql.append("SELECT @x:='%s' as word,id,(MATCH (descriptor) AGAINST ('%s') + MATCH (desc_user) AGAINST ('%s')) AS score FROM video WHERE (MATCH (descriptor) AGAINST ('%s') or  MATCH (desc_user) AGAINST ('%s')) AND type = 'bband' AND published='true'  LIMIT 25 ;\n" % (key,key,key,key,key))
 	       
                sql.append("SELECT @x:='%s' as word,id,(MATCH (descriptor) AGAINST ('%s') + MATCH (desc_user) AGAINST ('%s')) AS score FROM video WHERE (MATCH (descriptor) AGAINST ('%s') or  MATCH (desc_user) AGAINST ('%s')) AND type = 'modem' AND published='true'  LIMIT 25 ;\n" % (key,key,key,key,key))
 
         else:
-            raise VideoServerError("wrong query")
+            return
             ##args= keylist[3:-2]
             ##sql = "SELECT id FROM video WHERE  MATCH (descriptor) AGAINST ('%s') AS score  LIMIT 5 ORDER BY score" % str(args)
         
@@ -117,7 +119,9 @@ class Videolist(logfile.LogFile):
             defferedObj = self.generateVideo(words_new,words_old,participant,group,timestamp)
             return defferedObj
         else:
-            raise VideoServerError("no words added")
+            #raise VideoServerError("no words added")
+            return None
+            
     
     def getVideo(self,client = None,timestamp = None):
         """ return some new videos to the client """
@@ -181,7 +185,8 @@ class Videolist(logfile.LogFile):
             deferredObj.addCallback(self.storeVideos)
             return deferredObj
         else:
-            raise VideoServerError("no service?")
+            #raise VideoServerError("no service?")
+            return None
     
     def storeVideos(self,*args):
         try:
@@ -300,7 +305,7 @@ class SimpleService(pb.Service):
     
     def __init__(self, serviceName, serviceParent=None, authorizer=None, application=None):
         lock = 0
-        dbpool = myConnectionPool("MySQLdb", db='unmovie',host='localhost',user='******',passwd='*******')
+        dbpool = myConnectionPool("MySQLdb", db='unmovie',host='localhost',user='unmovie',passwd='.NCWFUmqMjfua4bL')
         self.db = VideoDatabase(dbpool) 
         self.videolist = Videolist()
         self.videolist.service = self
@@ -356,15 +361,15 @@ def main():
     auth.addIdentity(i1)
 
 
-    fls = video_server.VideoFactory(svr,"*******","8789")
+    fls = video_server.VideoFactory(svr,"193.197.169.185","8789")
     
-    sf = ShellFactory()
-    sf.username = 'axel'
-    sf.password = '****'
-    sf.namespace['server'] = svr
-    sf.namespace['quit'] = video_server.quit
-
-    appl.listenTCP(8790, sf)
+    # sf = ShellFactory()
+    # sf.username = 'axel'
+    # sf.password = '****'
+    # sf.namespace['server'] = svr
+    # sf.namespace['quit'] = video_server.quit
+    # 
+    # appl.listenTCP(8790, sf)
     appl.listenTCP(8789,fls)
     appl.listenTCP(8788, pb.BrokerFactory(pb.AuthRoot(auth)))
     appl.run()
